@@ -84,6 +84,13 @@ add_library(
     src/libcamera_jni.cpp
 )
 target_compile_definitions(photonlibcamera PUBLIC EGL_NO_X11=1)
+include(CheckIncludeFile)
+check_include_file(linux/dma-heap.h HAVE_LINUX_DMA_HEAP_H)
+if (NOT HAVE_LINUX_DMA_HEAP_H)
+    # Kernel UAPI headers older than 5.6 (e.g. Buildroot's Bootlin stable
+    # toolchain) lack dma-heap.h; use the bundled copy.
+    target_include_directories(photonlibcamera PRIVATE include/compat)
+endif ()
 target_include_directories(
     photonlibcamera
     PUBLIC

@@ -82,16 +82,26 @@ if [ "${use_docker}" != "1" ]; then
   )
   if [ -n "${toolchain_file}" ]; then
     # The toolchain file restricts header lookups to the target sysroot, so
-    # FindJNI cannot find the (architecture independent) JNI headers of the
-    # build JDK on its own. Point it at them. JAVA_JVM_LIBRARY only satisfies
+    # FindJNI cannot find the JNI headers of the build JDK on its own, and
+    # Buildroot's compiler wrapper rejects -I paths under /usr. jni.h and
+    # jni_md.h are architecture independent on Linux, so copy them into the
+    # build tree and point FindJNI there. JAVA_JVM_LIBRARY only satisfies
     # FindJNI's JVM component; the library does not link against libjvm.
+    jni_include="${build_dir}/jni-include"
+    mkdir -p "${jni_include}/linux"
+    cp "${JAVA_HOME}/include/jni.h" "${jni_include}/"
+    cp "${JAVA_HOME}/include/linux/jni_md.h" "${jni_include}/linux/"
     cmake_args+=(
       -DCMAKE_TOOLCHAIN_FILE="${toolchain_file}"
       -DJAVA_HOME="${JAVA_HOME}"
-      -DJAVA_INCLUDE_PATH="${JAVA_HOME}/include"
-      -DJAVA_INCLUDE_PATH2="${JAVA_HOME}/include/linux"
-      -DJAVA_AWT_INCLUDE_PATH="${JAVA_HOME}/include"
+      -DJAVA_INCLUDE_PATH="${jni_include}"
+      -DJAVA_INCLUDE_PATH2="${jni_include}/linux"
+      -DJAVA_AWT_INCLUDE_PATH="${jni_include}"
       -DJAVA_JVM_LIBRARY="${JAVA_HOME}/lib/server/libjvm.so"
+      # Debian and Ubuntu link with --as-needed by default; Buildroot does
+      # not. Without it the library records every OpenCV module as NEEDED,
+      # and PhotonVision only loads the ones it uses.
+      -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--as-needed"
     )
   elif [ "${sysroot_mode}" = "full" ]; then
     cmake_args+=(
