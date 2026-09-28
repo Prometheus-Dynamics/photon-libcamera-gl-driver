@@ -35,6 +35,24 @@ SYSROOT_DIR=/path/to/target/rootfs \
   tools/build_arm64_jni.sh
 ```
 
+## Arm64 cross build with a Buildroot toolchain
+
+When the target image is built with Buildroot, cross-compile with the
+toolchain and sysroot of that Buildroot output instead of an emulated arm64
+container. Buildroot images use Mesa without GLVND, so link EGL/GLESv2
+directly:
+
+```
+BUILDROOT_HOST_DIR=/path/to/buildroot-output/host \
+  MAVEN_LOCAL_REPO=/path/to/m2 \
+  CMAKE_EXTRA_ARGS="-DPHOTON_LIBCAMERA_LINK_GLES=ON -DPHOTON_LIBCAMERA_WERROR=OFF" \
+  tools/build_arm64_jni.sh
+```
+
+`CMAKE_TOOLCHAIN_FILE` can be used instead of `BUILDROOT_HOST_DIR` for other
+toolchains. The build host needs a JDK 17, CMake and make; `JAVA_HOME` is
+taken from `javac` on `PATH` when unset.
+
 ## Running eglinfo
 
 Compile with `g++ -std=c++17 -o eglinfo eglinfo.c headless_opengl.cpp -lEGL -lGLESv2 -lgbm`, and then run with  `./eglinfo`
