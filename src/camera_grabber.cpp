@@ -116,10 +116,6 @@ void CameraGrabber::requestComplete(libcamera::Request *request) {
         return;
     }
 
-    static int i = 0;
-
-    i++;
-
     if (m_onData) {
         m_onData->operator()(request);
     }
