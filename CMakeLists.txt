@@ -9,9 +9,27 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
-find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
+# Most distributions ship GLVND, where OpenGL::GL (libOpenGL.so.0) dispatches the
+# GLES entry points this library uses. Embedded images such as Buildroot use
+# Mesa without GLVND and have no libOpenGL, so allow linking EGL and GLESv2
+# directly instead.
+option(PHOTON_LIBCAMERA_LINK_GLES "Link EGL and GLESv2 via pkg-config instead of the GLVND OpenGL targets" OFF)
+if (PHOTON_LIBCAMERA_LINK_GLES)
+    pkg_check_modules(EGL REQUIRED egl)
+    pkg_check_modules(GLESV2 REQUIRED glesv2)
+    set(PHOTON_GL_INCLUDE_DIRS ${EGL_INCLUDE_DIRS} ${GLESV2_INCLUDE_DIRS})
+    set(PHOTON_GL_LIBRARIES ${EGL_LINK_LIBRARIES} ${GLESV2_LINK_LIBRARIES})
+else ()
+    find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
+    set(PHOTON_GL_INCLUDE_DIRS ${OPENGL_INCLUDE_DIRS})
+    set(PHOTON_GL_LIBRARIES OpenGL::GL OpenGL::EGL)
+endif ()
 pkg_check_modules(LIBDRM REQUIRED libdrm)
-pkg_check_modules(LIBCAMERA REQUIRED libcamera)
+
+# we now require libcamera 0.6
+set(LIBCAMERA_MIN_VERSION "0.6" CACHE STRING "Minimum libcamera version")
+pkg_check_modules(LIBCAMERA REQUIRED "libcamera>=${LIBCAMERA_MIN_VERSION}")
+
 pkg_check_modules(LIBGBM REQUIRED gbm)
 
 set(OPENCV_YEAR "frc2025")
@@ -66,11 +84,18 @@ add_library(
     src/libcamera_jni.cpp
 )
 target_compile_definitions(photonlibcamera PUBLIC EGL_NO_X11=1)
+include(CheckIncludeFile)
+check_include_file(linux/dma-heap.h HAVE_LINUX_DMA_HEAP_H)
+if (NOT HAVE_LINUX_DMA_HEAP_H)
+    # Kernel UAPI headers older than 5.6 (e.g. Buildroot's Bootlin stable
+    # toolchain) lack dma-heap.h; use the bundled copy.
+    target_include_directories(photonlibcamera PRIVATE include/compat)
+endif ()
 target_include_directories(
     photonlibcamera
     PUBLIC
         include
-        ${OPENGL_INCLUDE_DIRS}
+        ${PHOTON_GL_INCLUDE_DIRS}
         ${LIBDRM_INCLUDE_DIRS}
         ${LIBCAMERA_INCLUDE_DIRS}
         ${LIBGBM_INCLUDE_DIRS}
@@ -80,25 +105,35 @@ target_include_directories(photonlibcamera SYSTEM PUBLIC ${OPENCV_INCLUDE_PATH})
 target_link_libraries(
     photonlibcamera
     PUBLIC
-        OpenGL::GL
-        OpenGL::EGL
+        ${PHOTON_GL_LIBRARIES}
         Threads::Threads
         ${LIBCAMERA_LINK_LIBRARIES}
         ${LIBGBM_LINK_LIBRARIES}
         ${OPENCV_LIB_PATH}
         ${LIBDRM_LINK_LIBRARIES}
 )
-target_compile_options(photonlibcamera PRIVATE -Wall -Wextra -Wpedantic -Werror)
+option(PHOTON_LIBCAMERA_WERROR "Build with -Wpedantic -Werror" ON)
+target_compile_options(photonlibcamera PRIVATE -Wall -Wextra)
+if (PHOTON_LIBCAMERA_WERROR)
+    target_compile_options(photonlibcamera PRIVATE -Wpedantic -Werror)
+endif ()
 
-add_executable(libcamera_meme main.cpp)
-target_include_directories(
-    libcamera_meme
-    PUBLIC
-        ${OPENGL_INCLUDE_DIRS}
-        ${LIBDRM_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-        ${LIBGBM_INCLUDE_DIRS}
-        ${JNI_INCLUDE_DIRS}
-)
-target_include_directories(libcamera_meme SYSTEM PUBLIC ${OPENCV_INCLUDE_PATH})
-target_link_libraries(libcamera_meme photonlibcamera)
+option(BUILD_CAMERA_MEME "Build the libcamera_meme test binary" ON)
+if(BUILD_CAMERA_MEME)
+    add_executable(libcamera_meme main.cpp)
+    target_include_directories(
+        libcamera_meme
+        PUBLIC
+            ${PHOTON_GL_INCLUDE_DIRS}
+            ${LIBDRM_INCLUDE_DIRS}
+            ${LIBCAMERA_INCLUDE_DIRS}
+            ${LIBGBM_INCLUDE_DIRS}
+            ${JNI_INCLUDE_DIRS}
+    )
+    target_include_directories(
+        libcamera_meme
+        SYSTEM
+        PUBLIC ${OPENCV_INCLUDE_PATH}
+    )
+    target_link_libraries(libcamera_meme photonlibcamera)
+endif()

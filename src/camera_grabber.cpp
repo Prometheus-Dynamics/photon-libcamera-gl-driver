@@ -143,13 +143,25 @@ void CameraGrabber::setControls(libcamera::Request *request) {
     using namespace libcamera;
 
     auto &controls_ = request->controls();
-    if (m_model != OV9281) {
-        controls_.set(controls::AwbEnable, false); // AWB disabled
+    // Only set controls the camera reports (e.g. no colour controls on a mono
+    // sensor), so newer libcamera does not warn about unsupported controls.
+    const auto &control_info = m_camera->controls();
+    const auto supports = [&](const ControlId &id) {
+        return control_info.count(&id) != 0;
+    };
+    // PhotonVision's Java side sees the OV9782 as an OV9281 and never sends
+    // red/blue gains for it, so let the IPA run auto white balance on it.
+    // Other colour sensors keep the manual gains PhotonVision sets.
+    const bool auto_white_balance = m_model == OV9782;
+
+    if (supports(controls::AwbEnable) && !isGrayScale(m_model)) {
+        controls_.set(controls::AwbEnable, auto_white_balance);
     }
     controls_.set(controls::AnalogueGain,
                   m_settings.analogGain); // Analog gain, min 1 max big number?
 
-    if (m_model != OV9281) {
+    if (!auto_white_balance && !isGrayScale(m_model) &&
+        supports(controls::ColourGains)) {
         controls_.set(controls::ColourGains,
                       libcamera::Span<const float, 2>{
                           {m_settings.awbRedGain,
@@ -164,7 +176,7 @@ void CameraGrabber::setControls(libcamera::Request *request) {
     controls_.set(controls::Contrast,
                   m_settings.contrast); // Nominal 1
 
-    if (m_model != OV9281) {
+    if (!isGrayScale(m_model) && supports(controls::Saturation)) {
         controls_.set(controls::Saturation,
                       m_settings.saturation); // Nominal 1, 0 would be greyscale
     }
@@ -175,7 +187,7 @@ void CameraGrabber::setControls(libcamera::Request *request) {
 
         controls_.set(controls::AeMeteringMode,
                       controls::MeteringCentreWeighted);
-        if (m_model == OV9281) {
+        if (m_model == OV9281 || m_model == OV9782) {
             controls_.set(controls::AeExposureMode, controls::ExposureNormal);
         } else {
             controls_.set(controls::AeExposureMode, controls::ExposureShort);
@@ -197,7 +209,7 @@ void CameraGrabber::setControls(libcamera::Request *request) {
 
     controls_.set(controls::ExposureValue, 0);
 
-    if (m_model != OV7251 && m_model != OV9281) {
+    if (!isGrayScale(m_model) && supports(controls::Sharpness)) {
         controls_.set(controls::Sharpness, 1);
     }
 }

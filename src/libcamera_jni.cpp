@@ -136,8 +136,7 @@ JNIEXPORT jint Java_org_photonvision_raspi_LibCameraJNI_getSensorModelRaw(
             // std::printf("Checking camera at path %s w/model %s\n",
             // c->id().c_str(), model.value().c_str());
             if (model) {
-                model_enum =
-                    reinterpret_cast<CameraModel>(stringToModel(model.value()));
+                model_enum = toJavaSensorModel(stringToModel(model.value()));
             }
 
             break;

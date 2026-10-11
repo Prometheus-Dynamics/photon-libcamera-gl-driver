@@ -18,6 +18,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum CameraModel {
@@ -28,7 +29,15 @@ enum CameraModel {
     IMX477, // Picam HQ
     OV9281,
     OV7251,
-    Unknown
+    Unknown,
+    // Models below are only known to this library. PhotonVision's Java
+    // SensorModel enum mirrors the values above by ordinal, so these must stay
+    // after Unknown and be reported through toJavaSensorModel().
+    OV9782, // Colour version of the OV9281 (Raze)
 };
-CameraModel stringToModel(const std::string &model);
+CameraModel stringToModel(std::string_view model);
 bool isGrayScale(CameraModel model);
+// The model PhotonVision's SensorModel enum should see. The OV9782 is
+// reported as an OV9281: same 1280x800 global shutter sensor and video modes
+// (libcamera's Raspberry Pi IPA aliases its camera helper the same way).
+CameraModel toJavaSensorModel(CameraModel model);
